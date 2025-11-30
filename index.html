@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schrödinger Equation Webcam Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            color: #fff;
+            overflow: hidden;
+        }
+
+        .main-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .canvas-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .canvas-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            border: 2px solid #4fc3f7;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(79, 195, 247, 0.3);
+        }
+
+        .info-bar {
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-top: 1px solid #333;
+            font-size: 0.85em;
+            color: #aaa;
+        }
+
+        .header {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            color: #4fc3f7;
+            text-shadow: 0 2px 10px rgba(79, 195, 247, 0.5);
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: #aaa;
+            font-size: 0.9em;
+        }
+
+        .controls-panel {
+            width: 320px;
+            background: rgba(20, 20, 30, 0.95);
+            border-left: 2px solid #333;
+            overflow-y: auto;
+            padding: 15px;
+        }
+
+        .control-section {
+            margin-bottom: 12px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background: #222;
+        }
+
+        .section-header {
+            padding: 8px 10px;
+            background: #333;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        }
+
+        .section-header:hover {
+            background: #444;
+        }
+
+        .section-header h3 {
+            margin: 0;
+            color: #4fc3f7;
+            font-size: 0.95em;
+        }
+
+        .section-toggle {
+            color: #aaa;
+            font-size: 1em;
+        }
+
+        .section-content {
+            padding: 10px;
+        }
+
+        .section-content.collapsed {
+            display: none;
+        }
+
+        .control-group {
+            margin-bottom: 8px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 3px;
+            color: #ccc;
+            font-size: 0.8em;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            margin-bottom: 2px;
+            accent-color: #4fc3f7;
+            height: 20px;
+        }
+
+        select,
+        button {
+            padding: 5px 8px;
+            border: none;
+            border-radius: 3px;
+            background: #4fc3f7;
+            color: white;
+            cursor: pointer;
+            margin-bottom: 5px;
+            font-size: 0.8em;
+            width: 100%;
+        }
+
+        button:hover,
+        select:hover {
+            background: #29b6f6;
+        }
+
+        .small-text {
+            font-size: 0.7em;
+            color: #888;
+            margin-top: 2px;
+            line-height: 1.2;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 5px;
+            accent-color: #4fc3f7;
+        }
+
+        .error {
+            position: fixed;
+            top: 20px;
+            right: 340px;
+            background: #d32f2f;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 4px;
+            z-index: 200;
+            display: none;
+            font-size: 0.85em;
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+
+            .controls-panel {
+                width: 100%;
+                height: 40vh;
+                border-left: none;
+                border-top: 2px solid #333;
+            }
+
+            .header {
+                position: relative;
+                padding: 15px;
+                background: rgba(0, 0, 0, 0.7);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="error" id="error-message"></div>
+
+    <div class="main-container">
+        <div class="canvas-section">
+            <div class="header">
+                <h1>QuantumCam</h1>
+            </div>
+
+            <div class="canvas-wrapper">
+                <canvas id="simulation-canvas" width="640" height="480"></canvas>
+            </div>
+
+            <div class="info-bar">
+                <span id="resolution-info">Resolution: 640×480</span> •
+                <span id="fps-info">FPS: --</span> •
+                <span>WebGPU 2D Quantum Simulation</span>
+            </div>
+        </div>
+
+        <div class="controls-panel">
+            <!-- Visualization Mode -->
+            <div class="control-section">
+                <div class="section-header" onclick="toggleSection('viz')">
+                    <h3>🎨 Visualization</h3>
+                    <span class="section-toggle" id="viz-toggle">▼</span>
+                </div>
+                <div class="section-content" id="viz-content">
+                    <div class="control-group">
+                        <label for="display-mode">Display Mode:</label>
+                        <select id="display-mode">
+                            <option value="0">Real Part ψ_R</option>
+                            <option value="1">Probability |ψ|²</option>
+                            <option value="3" selected>Real + Imaginary (Color)</option>
+                            <option value="4">Imaginary ψ_I</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="blend-mode">Blend Mode:</label>
+                        <select id="blend-mode">
+                            <option value="0" selected>Normal</option>
+                            <option value="1">Add (Glow)</option>
+                            <option value="2">Subtract</option>
+                            <option value="3">Multiply</option>
+                            <option value="4">Screen</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="mix-ratio">Webcam Mix: <span id="mix-ratio-value">0.40</span></label>
+                        <input type="range" id="mix-ratio" min="0.0" max="1.0" value="0.40" step="0.05">
+                        <div class="small-text">0 = pure wave, 1 = pure webcam</div>
+                    </div>
+                    <div class="control-group">
+                        <label for="wave-amplitude">Brightness: <span id="wave-amplitude-value">49.6</span></label>
+                        <input type="range" id="wave-amplitude" min="0.1" max="100.0" value="49.6" step="0.5">
+                    </div>
+                    <div class="control-group">
+                        <label for="gamma">Contrast (γ): <span id="gamma-value">3.40</span></label>
+                        <input type="range" id="gamma" min="0.1" max="5.0" value="3.40" step="0.05">
+                        <div class="small-text">Lower = more contrast (0.3-1.0 recommended)</div>
+                    </div>
+                    <div class="control-group">
+                        <label for="prob-scale">Probability Glow: <span id="prob-scale-value">4991</span></label>
+                        <input type="range" id="prob-scale" min="1" max="10000" value="4991" step="10">
+                    </div>
+                    <p class="small-text" style="margin-top: 6px; color: #4fc3f7;" id="mode-hint">
+                        <strong>Real + Imaginary Combined</strong><br>
+                        🔴 Red = +Re • 🔵 Blue = -Re<br>
+                        🟡 Yellow = +Im • 🟢 Cyan = -Im<br>
+                        <span style="color: #aaa;">Rapid color changes = short wavelength (high momentum)</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Performance -->
+            <div class="control-section">
+                <div class="section-header" onclick="toggleSection('perf')">
+                    <h3>⚡ Speed & Performance</h3>
+                    <span class="section-toggle" id="perf-toggle">▼</span>
+                </div>
+                <div class="section-content" id="perf-content">
+                    <div class="control-group">
+                        <label for="steps-per-frame">Steps per Frame: <span
+                                id="steps-per-frame-value">100</span></label>
+                        <input type="range" id="steps-per-frame" min="1" max="100" value="100" step="1">
+                        <div class="small-text">Higher = faster evolution</div>
+                    </div>
+                    <div class="control-group">
+                        <label for="time-step">Time Step (dt): <span id="time-step-value">0.005</span></label>
+                        <input type="range" id="time-step" min="0.005" max="0.1" value="0.005" step="0.005">
+                        <div class="small-text">Larger = faster but may destabilize</div>
+                    </div>
+                    <div class="control-group">
+                        <label for="space-step">Space Step (dx): <span id="space-step-value">5.2</span></label>
+                        <input type="range" id="space-step" min="0.1" max="10.0" value="5.2" step="0.1">
+                        <div class="small-text">Larger = faster wave propagation</div>
+                    </div>
+                    <div class="control-group">
+                        <label for="source-strength">Source Strength: <span
+                                id="source-strength-value">2.0</span></label>
+                        <input type="range" id="source-strength" min="0.0" max="10.0" value="2.0" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label for="source-size">Source Size: <span id="source-size-value">2.5</span></label>
+                        <input type="range" id="source-size" min="1.0" max="20.0" value="2.5" step="0.5">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Potential Control -->
+            <div class="control-section">
+                <div class="section-header" onclick="toggleSection('potential')">
+                    <h3>⚡ Potential V(x,y)</h3>
+                    <span class="section-toggle" id="potential-toggle">▼</span>
+                </div>
+                <div class="section-content" id="potential-content">
+                    <div class="control-group">
+                        <label for="potential-amplitude">Amplitude: <span
+                                id="potential-amplitude-value">0.5</span></label>
+                        <input type="range" id="potential-amplitude" min="0.0" max="10.0" value="0.5" step="0.1">
+                        <div class="small-text">V = amplitude × (V_raw - offset)</div>
+                    </div>
+                    <div class="control-group">
+                        <label for="potential-offset">Offset: <span id="potential-offset-value">0.0</span></label>
+                        <input type="range" id="potential-offset" min="-1.0" max="1.0" value="0.0" step="0.05">
+                        <div class="small-text">Negative = attractive wells</div>
+                    </div>
+                    <div class="control-group">
+                        <label for="boundary-threshold">Base Scale: <span
+                                id="boundary-threshold-value">0.25</span></label>
+                        <input type="range" id="boundary-threshold" min="0.05" max="0.95" value="0.25" step="0.05">
+                    </div>
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="invert-potential"> Invert (bright = high V)
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Initial Wavepacket -->
+            <div class="control-section">
+                <div class="section-header" onclick="toggleSection('wavepacket')">
+                    <h3>🌊 Initial Wavepacket</h3>
+                    <span class="section-toggle" id="wavepacket-toggle">▼</span>
+                </div>
+                <div class="section-content" id="wavepacket-content">
+                    <div class="control-group">
+                        <label for="sigma">Width (σ): <span id="sigma-value">10</span></label>
+                        <input type="range" id="sigma" min="1" max="100" value="10" step="1">
+                        <div class="small-text">Smaller = more localized</div>
+                    </div>
+                    <div class="control-group">
+                        <label for="kx">Momentum kₓ: <span id="kx-value">0.6</span></label>
+                        <input type="range" id="kx" min="-10.0" max="10.0" value="0.6" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label for="ky">Momentum kᵧ: <span id="ky-value">3.9</span></label>
+                        <input type="range" id="ky" min="-10.0" max="10.0" value="3.9" step="0.1">
+                    </div>
+                    <button id="reset-btn">🔄 Reset Wavefunction</button>
+                </div>
+            </div>
+
+            <!-- Physics Parameters -->
+            <div class="control-section">
+                <div class="section-header" onclick="toggleSection('physics')">
+                    <h3>⚙️ Physics</h3>
+                    <span class="section-toggle" id="physics-toggle">▼</span>
+                </div>
+                <div class="section-content" id="physics-content">
+                    <div class="control-group">
+                        <label for="wave-speed">ℏ/m coefficient: <span id="wave-speed-value">4.3</span></label>
+                        <input type="range" id="wave-speed" min="0.5" max="5.0" value="4.3" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label for="damping">Damping: <span id="damping-value">0.0</span></label>
+                        <input type="range" id="damping" min="0" max="0.1" value="0.0" step="0.001">
+                        <div class="small-text">For visualization stability</div>
+                    </div>
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="source-enabled" checked> Continuous Source
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- About -->
+            <div class="control-section">
+                <div class="section-header" onclick="toggleSection('about')">
+                    <h3>ℹ️ About</h3>
+                    <span class="section-toggle" id="about-toggle">▼</span>
+                </div>
+                <div class="section-content collapsed" id="about-content">
+                    <p class="small-text" style="line-height: 1.5;">
+                        This app simulates the 2D time-dependent Schrödinger equation:<br>
+                        <strong>iℏ∂ψ/∂t = -ℏ²/(2m)∇²ψ + V(x,y)ψ</strong><br><br>
+
+                        Your webcam creates a quantum potential landscape where dark areas act as barriers and bright
+                        areas allow free propagation.<br><br>
+
+                        Watch quantum wavepackets scatter, diffract, and tunnel through your hands!<br><br>
+
+                        Uses WebGPU compute shaders for real-time simulation.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+
+    <script>
+        function toggleSection(sectionId) {
+            const content = document.getElementById(sectionId + '-content');
+            const toggle = document.getElementById(sectionId + '-toggle');
+            content.classList.toggle('collapsed');
+            toggle.textContent = content.classList.contains('collapsed') ? '▶' : '▼';
+        }
+
+        // FPS counter
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fps = 0;
+
+        function updateFPS() {
+            frameCount++;
+            const currentTime = performance.now();
+            const delta = currentTime - lastTime;
+
+            if (delta >= 1000) {
+                fps = Math.round((frameCount * 1000) / delta);
+                document.getElementById('fps-info').textContent = `FPS: ${fps}`;
+                frameCount = 0;
+                lastTime = currentTime;
+            }
+
+            requestAnimationFrame(updateFPS);
+        }
+        updateFPS();
+    </script>
+</body>
+
+</html>
