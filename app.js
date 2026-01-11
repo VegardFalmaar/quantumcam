@@ -6,6 +6,9 @@ class QuantumWebcam {
         this.device = null;
         this.canvas = document.getElementById('simulation-canvas');
         this.context = null;
+        this.potentialSource = 'webcam';     // 'webcam' | 'image'
+        this.uploadedBitmap = null;          // ImageBitmap
+        this.uploadedDirty = false;          // copy-to-texture needed?
 
         // Simulation parameters
         this.params = {
@@ -168,6 +171,12 @@ class QuantumWebcam {
             format: 'rgba8unorm',
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
         });
+
+        this.textures.upload = this.device.createTexture({
+            size: [this.params.width, this.params.height],
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+        });
     }
 
     async createPipelines() {
@@ -250,6 +259,67 @@ class QuantumWebcam {
         console.log(`🌊 Wavepacket initialized: σ=${sigma}, kx=${this.params.kx}, ky=${this.params.ky}`);
     }
 
+
+
+    // updated version for image upload
+    // updateUploadTexture() {
+    //     if (this.frameCount % 60 === 0) {
+    //         console.log(`Value of this.potentialSource is ${this.potentialSource}`);
+    //     }
+    //   // If the user selected an uploaded image, only upload it when it changes.
+    //   if (this.potentialSource === 'image' && this.uploadedBitmap) {
+    //     if (this.uploadedDirty) {
+    //       this.device.queue.copyExternalImageToTexture(
+    //         { source: this.uploadedBitmap },
+    //         { texture: this.textures.webcam },
+    //         [this.params.width, this.params.height]
+    //       );
+    //       this.uploadedDirty = false;
+    //     }
+    //     return;
+    //   }
+
+    //   // Otherwise use webcam as before
+    //   if (!this.webcamReady || !this.webcamVideo) return;
+    //   this.device.queue.copyExternalImageToTexture(
+    //     { source: this.webcamVideo },
+    //     { texture: this.textures.webcam },
+    //     [this.params.width, this.params.height]
+    //   );
+    // }
+
+drawCoverToCanvas(img, canvas) {
+  const ctx = canvas.getContext('2d');
+  const cw = canvas.width, ch = canvas.height;
+  const iw = img.width, ih = img.height;
+
+  const scale = Math.max(cw / iw, ch / ih);
+  const w = iw * scale, h = ih * scale;
+  const x = (cw - w) / 2, y = (ch - h) / 2;
+
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.drawImage(img, x, y, w, h);
+}
+    updateUploadTexture() {
+      if (!this.uploadedBitmap || !this.uploadedDirty) return;
+
+
+this.potentialCanvas ??= Object.assign(document.createElement('canvas'), {
+  width: this.params.width,
+  height: this.params.height
+});
+
+this.drawCoverToCanvas(this.uploadedBitmap, this.potentialCanvas);
+      this.device.queue.copyExternalImageToTexture(
+        { source: this.potentialCanvas },
+        { texture: this.textures.upload },
+        [this.params.width, this.params.height]
+      );
+
+      this.uploadedDirty = false;
+    }
+
+
     updateWebcamTexture() {
         if (!this.webcamReady || !this.webcamVideo) return;
         this.device.queue.copyExternalImageToTexture(
@@ -298,6 +368,7 @@ class QuantumWebcam {
         this.frameCount++;
 
         this.updateWebcamTexture();
+        this.updateUploadTexture();
         this.updateParametersBuffer();
 
         // Run multiple simulation steps per frame
@@ -305,9 +376,9 @@ class QuantumWebcam {
         const steps = Math.max(1, Math.min(100, Math.round(this.params.stepsPerFrame)));
 
         // Log every 60 frames (~1 second)
-        if (this.frameCount % 60 === 0) {
-            console.log(`⚡ Running ${steps} steps per frame`);
-        }
+        // if (this.frameCount % 60 === 0) {
+        //     console.log(`⚡ Running ${steps} steps per frame`);
+        // }
 
         // Extract potential once per frame (before simulation steps)
         const potentialEncoder = this.device.createCommandEncoder();
@@ -332,10 +403,17 @@ class QuantumWebcam {
     }
 
     extractPotential(encoder) {
+
+
+  const potentialSrcView =
+    (this.potentialSource === 'image' && this.uploadedBitmap)
+      ? this.textures.upload.createView()
+      : this.textures.webcam.createView();
+
         const bindGroup = this.device.createBindGroup({
             layout: this.pipelines.potentialExtraction.getBindGroupLayout(0),
             entries: [
-                { binding: 0, resource: this.textures.webcam.createView() },
+                { binding: 0, resource: potentialSrcView },
                 { binding: 1, resource: { buffer: this.buffers.potential } },
                 { binding: 2, resource: { buffer: this.buffers.params } }
             ]
@@ -405,6 +483,13 @@ class QuantumWebcam {
     }
 
     render(encoder) {
+
+
+        const backgroundTextureView =
+            (this.potentialSource === 'image' && this.uploadedBitmap)
+                ? this.textures.upload.createView()
+                : this.textures.webcam.createView();
+
         // Update render params
         const renderParams = new ArrayBuffer(16);
         const renderView = new DataView(renderParams);
@@ -416,7 +501,7 @@ class QuantumWebcam {
             layout: this.pipelines.render.getBindGroupLayout(0),
             entries: [
                 { binding: 0, resource: this.textures.output.createView() },
-                { binding: 1, resource: this.textures.webcam.createView() },
+                { binding: 1, resource: backgroundTextureView },
                 { binding: 2, resource: this.device.createSampler({ magFilter: 'linear', minFilter: 'linear' }) },
                 { binding: 3, resource: { buffer: this.buffers.renderParams } }
             ]
@@ -469,6 +554,34 @@ class QuantumWebcam {
         this.setupSlider('ky', 'ky');
         this.setupSlider('wave-speed', 'waveSpeed');
         this.setupSlider('damping', 'damping');
+
+
+
+        // image upload additions
+        const sourceSelect = document.getElementById('potential-source');
+        const fileInput = document.getElementById('potential-image');
+
+        sourceSelect?.addEventListener('change', () => {
+          this.potentialSource = sourceSelect.value;
+        });
+
+        fileInput?.addEventListener('change', async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+
+          // Decode image in a GPU-friendly way
+          const bitmap = await createImageBitmap(file);
+          // Optional: close previous bitmap to free memory
+          if (this.uploadedBitmap) this.uploadedBitmap.close();
+          this.uploadedBitmap = bitmap;
+          this.uploadedDirty = true;
+
+          // If user chose "image", show it immediately
+          this.potentialSource = 'image';
+          sourceSelect.value = 'image';
+        });
+
+
 
         document.getElementById('invert-potential').addEventListener('change', (e) => {
             this.params.invertBoundaries = e.target.checked;
