@@ -213,7 +213,8 @@ class QuantumWebcam {
     }
 
     initializeWavefunction() {
-        const data = new Float32Array(this.params.width * this.params.height);
+        const real = new Float32Array(this.params.width * this.params.height);
+        const imag = new Float32Array(this.params.width * this.params.height);
         const centerX = this.params.width / 2;
         const centerY = this.params.height / 2;
 
@@ -222,7 +223,6 @@ class QuantumWebcam {
         const k0x = this.params.kx * 0.3;
         const k0y = this.params.ky * 0.3;
 
-        // Real part
         for (let y = 0; y < this.params.height; y++) {
             for (let x = 0; x < this.params.width; x++) {
                 const idx = y * this.params.width + x;
@@ -233,60 +233,20 @@ class QuantumWebcam {
                 const gaussian = Math.exp(-r2 / (2 * sigma2));
                 const phase = k0x * dx + k0y * dy;
 
-                data[idx] = gaussian * Math.cos(phase);
+                real[idx] = gaussian * Math.cos(phase);
+                imag[idx] = gaussian * Math.sin(phase);
             }
         }
-        this.device.queue.writeBuffer(this.buffers.psiR[0], 0, data);
-        this.device.queue.writeBuffer(this.buffers.psiR[1], 0, data);
+        this.device.queue.writeBuffer(this.buffers.psiR[0], 0, real);
+        this.device.queue.writeBuffer(this.buffers.psiR[1], 0, real);
 
-        // Imaginary part
-        for (let y = 0; y < this.params.height; y++) {
-            for (let x = 0; x < this.params.width; x++) {
-                const idx = y * this.params.width + x;
-                const dx = x - centerX;
-                const dy = y - centerY;
-                const r2 = dx * dx + dy * dy;
+        this.device.queue.writeBuffer(this.buffers.psiI[0], 0, imag);
+        this.device.queue.writeBuffer(this.buffers.psiI[1], 0, imag);
 
-                const gaussian = Math.exp(-r2 / (2 * sigma2));
-                const phase = k0x * dx + k0y * dy;
-
-                data[idx] = gaussian * Math.sin(phase);
-            }
-        }
-        this.device.queue.writeBuffer(this.buffers.psiI[0], 0, data);
-        this.device.queue.writeBuffer(this.buffers.psiI[1], 0, data);
-
-        console.log(`🌊 Wavepacket initialized: σ=${sigma}, kx=${this.params.kx}, ky=${this.params.ky}`);
+        console.log(`🌊 Wavepacket initialized using new code: σ=${sigma}, kx=${this.params.kx}, ky=${this.params.ky}`);
     }
 
 
-
-    // updated version for image upload
-    // updateUploadTexture() {
-    //     if (this.frameCount % 60 === 0) {
-    //         console.log(`Value of this.potentialSource is ${this.potentialSource}`);
-    //     }
-    //   // If the user selected an uploaded image, only upload it when it changes.
-    //   if (this.potentialSource === 'image' && this.uploadedBitmap) {
-    //     if (this.uploadedDirty) {
-    //       this.device.queue.copyExternalImageToTexture(
-    //         { source: this.uploadedBitmap },
-    //         { texture: this.textures.webcam },
-    //         [this.params.width, this.params.height]
-    //       );
-    //       this.uploadedDirty = false;
-    //     }
-    //     return;
-    //   }
-
-    //   // Otherwise use webcam as before
-    //   if (!this.webcamReady || !this.webcamVideo) return;
-    //   this.device.queue.copyExternalImageToTexture(
-    //     { source: this.webcamVideo },
-    //     { texture: this.textures.webcam },
-    //     [this.params.width, this.params.height]
-    //   );
-    // }
 
 drawCoverToCanvas(img, canvas) {
   const ctx = canvas.getContext('2d');
